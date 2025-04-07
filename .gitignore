@@ -3,6 +3,9 @@
 /.pnp
 .pnp.js
 
+# Miscelaneous
+/misc
+
 # testing
 /coverage
 

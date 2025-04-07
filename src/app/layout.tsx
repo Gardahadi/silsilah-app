@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Tree Visualizer',
-  description: 'Visualize tree structures from Supabase',
+  title: 'Silsilah App',
+  description: 'Family tree visualization application',
 };
 
 export default function RootLayout({
