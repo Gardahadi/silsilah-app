@@ -285,7 +285,7 @@ export default function Home() {
               onClick={handleRecenter}
               className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md shadow-sm text-sm font-medium hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400"
             >
-              Refresh
+              Perbaharui Halaman 
             </button>
           </div>
         </div>
