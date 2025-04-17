@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import Tree, { TreeNodeDatum } from 'react-d3-tree';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { PasswordProtection } from '../components/PasswordProtection';
 
 interface FamilyMember {
   id: number;
@@ -40,15 +42,22 @@ interface TreeNode {
   _collapsed?: boolean;
 }
 
+// View options
+type ViewType = 'graph' | 'text';
+
 export default function Home() {
+  const { isAuthenticated } = useAuth();
   const [treeData, setTreeData] = useState<TreeNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [viewType, setViewType] = useState<ViewType>('graph');
   const treeContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    
     const updateDimensions = () => {
       setDimensions({
         width: window.innerWidth,
@@ -60,9 +69,11 @@ export default function Home() {
     window.addEventListener('resize', updateDimensions);
 
     return () => window.removeEventListener('resize', updateDimensions);
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+    
     async function fetchFamilyData() {
       try {
         const { data, error } = await supabase
@@ -94,7 +105,7 @@ export default function Home() {
     }
 
     fetchFamilyData();
-  }, []);
+  }, [isAuthenticated]);
 
   const transformToTree = (members: FamilyMember[]): TreeNode => {
     const memberMap = new Map<number, TreeNode>();
@@ -181,6 +192,64 @@ export default function Home() {
     setExpandedNodes(newExpandedNodes);
   };
 
+  // Function to toggle view between graph and text
+  const toggleView = () => {
+    setViewType(viewType === 'graph' ? 'text' : 'graph');
+  };
+
+  // Recursive component for the text-based view
+  const TextTreeNode = ({ node, depth = 0 }: { node: TreeNode; depth?: number }) => {
+    const indentSize = 20; // Pixels per indent level
+    const birthYear = node.attributes?.birthYear ? ` (${node.attributes.birthYear})` : '';
+    
+    return (
+      <div>
+        <div 
+          className="py-1 flex items-baseline" 
+          style={{ paddingLeft: `${depth * indentSize}px` }}
+        >
+          <span className="font-medium">{node.name} </span>
+          <span className="text-gray-600 text-sm ml-1">{birthYear}</span>
+          
+          {node.spouse && (
+            <span className="text-gray-600 ml-2">
+               - {node.spouse.name}
+              {node.spouse.attributes?.birthYear ? ` (${node.spouse.attributes.birthYear})` : ''}
+            </span>
+          )}
+        </div>
+        
+        {node.children && node.children.length > 0 && (
+          
+          <div>
+            {node.children.map((child, i) => (
+              <TextTreeNode key={`${child.name} - ${i}`} node={child} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Component for the text-based view
+  const TextBasedView = () => {
+    if (!treeData) return null;
+    
+    return (
+      <div className="p-6 bg-white rounded-lg shadow-sm overflow-auto max-h-[calc(100vh-200px)]">
+        <br></br>
+        <div className="font-mono text-sm sm:text-base">
+          <TextTreeNode node={treeData} />
+        </div>
+      </div>
+    );
+  };
+
+  // If not authenticated, show password protection component
+  if (!isAuthenticated) {
+    return <PasswordProtection />;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -200,94 +269,103 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-4 flex flex-col items-center">
+        <div className="container mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between">
           <h1 className="text-2xl md:text-3xl font-bold text-center text-gray-800">
-            Family Tree
+            Silsilah Keluarga Galib Tjakradinata
           </h1>
-          <p className="text-sm text-center mt-2">
-            <span className="text-indigo-600">●</span> Click the node to collapse/expand 
-          </p>
-          <p className="text-sm text-center mt-2">
-            <span className="text-indigo-600">●</span> Click <span 
-              onClick={handleRecenter} 
-              style={{ color: 'blue', cursor: 'pointer' }}
-            >here</span> to refresh
-          </p>
           
+          <div className="flex items-center mt-4 sm:mt-0 space-x-4 p-4">
+            <button
+              onClick={toggleView}
+              className="p-4 px-4 py-2 bg-indigo-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              Ganti Tampilan 
+            </button> <div> <p>    </p></div>
+            <button
+              onClick={handleRecenter}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md shadow-sm text-sm font-medium hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       </header>
-      <main className="container mx-auto px-4 py-8">
-        <div 
-          ref={treeContainerRef}
-          className="relative w-full" 
-          style={{ height: 'calc(100vh - 120px)' }}
-        >
-          {treeData && (
-            <Tree
-              data={treeData}
-              orientation="horizontal"
-              pathFunc="step"
-              translate={{
-                x: dimensions.width < 768 ? dimensions.width / 4 : dimensions.width / 3,
-                y: dimensions.height / 2
-              }}
-              nodeSize={{
-                x: dimensions.width < 768 ? 150 : 200,
-                y: dimensions.width < 768 ? 80 : 100
-              }}
-              separation={{
-                siblings: dimensions.width < 768 ? 1.5 : 2,
-                nonSiblings: dimensions.width < 768 ? 1.5 : 2
-              }}
-              renderCustomNodeElement={({ nodeDatum, toggleNode }) => {
-                const customNode = nodeDatum as CustomTreeNodeDatum;
-                const isExpanded = expandedNodes.has(customNode.name);
-                const hasChildren = customNode.children && customNode.children.length > 0;
-                
-                return (
-                  <g>
-                    <circle
-                      r={dimensions.width < 768 ? 15 : 20}
-                      fill={hasChildren ? (isExpanded ? "#4F46E5" : "#EF4444") : "#4F46E5"}
-                      onClick={() => {
-                        handleNodeClick(customNode);
-                        toggleNode();
-                      }}
-                      className="cursor-pointer hover:opacity-80 transition-colors"
-                    />
-                    <text
-                      dy={dimensions.width < 768 ? 30 : 35}
-                      textAnchor="middle"
-                      className="text-xs md:text-sm font-medium"
-                    >
-                      {customNode.name}
-                    </text>
-                    {customNode.attributes?.birthYear && (
+      
+      <main className="container mx-auto px-4 py-8 m-4px">
+        {viewType === 'graph' ? (
+          <div 
+            ref={treeContainerRef}
+            className="relative w-full" 
+            style={{ height: 'calc(100vh - 120px)' }}
+          >
+            {treeData && (
+              <Tree
+                data={treeData}
+                orientation="vertical"
+                pathFunc="step"
+                translate={{
+                  x: dimensions.width < 768 ? dimensions.width / 4 : dimensions.width / 3,
+                  y: dimensions.height / 2
+                }}
+                nodeSize={{
+                  x: dimensions.width < 768 ? 150 : 200,
+                  y: dimensions.width < 768 ? 80 : 100
+                }}
+                separation={{
+                  siblings: dimensions.width < 768 ? 1.5 : 2,
+                  nonSiblings: dimensions.width < 768 ? 1.5 : 2
+                }}
+                renderCustomNodeElement={({ nodeDatum, toggleNode }) => {
+                  const customNode = nodeDatum as CustomTreeNodeDatum;
+                  const isExpanded = expandedNodes.has(customNode.name);
+                  const hasChildren = customNode.children && customNode.children.length > 0;
+                  
+                  return (
+                    <g>
+                      <circle
+                        r={dimensions.width < 768 ? 15 : 20}
+                        fill={hasChildren ? (isExpanded ? "#0047AB" : "#D22B2B") : "#0047AB"}
+                        onClick={() => {
+                          handleNodeClick(customNode);
+                          toggleNode();
+                        }}
+                        className="cursor-pointer hover:opacity-80 transition-colors"
+                      />
                       <text
-                        dy={dimensions.width < 768 ? 45 : 55}
+                        dy={dimensions.width < 768 ? 30 : 35}
                         textAnchor="middle"
-                        className="text-[10px] md:text-xs text-gray-600"
+                        className="text-xs md:text-sm font-medium"
                       >
-                        {customNode.attributes.birthYear}
+                        {customNode.name}
                       </text>
-                    )}
-                    {customNode.spouse && (
-                      <text
-                        dy={dimensions.width < 768 ? 60 : 75}
-                        textAnchor="middle"
-                        className="text-[10px] md:text-xs text-gray-600"
-                      >
-                        Spouse: {customNode.spouse.name}
-                      </text>
-                    )}
-                  </g>
-                );
-              }}
-            />
-          )}
-
-        </div>
+                      {customNode.attributes?.birthYear && (
+                        <text
+                          dy={dimensions.width < 768 ? 45 : 55}
+                          textAnchor="middle"
+                          className="text-[10px] md:text-xs text-gray-600"
+                        >
+                          {customNode.attributes.birthYear}
+                        </text>
+                      )}
+                      {customNode.spouse && (
+                        <text
+                          dy={dimensions.width < 768 ? 60 : 75}
+                          textAnchor="middle"
+                          className="text-[10px] md:text-xs text-gray-600"
+                        >
+                          Pasangan: {customNode.spouse.name}
+                        </text>
+                      )}
+                    </g>
+                  );
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <TextBasedView />
+        )}
       </main>
     </div>
   );
-} 
+}
